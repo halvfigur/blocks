@@ -61,9 +61,8 @@ class TetrisModel {
         // The height of the game surface
         this.rows = rows;
 
-        // The game surface cells. The top left corner is at index 0, 0.
-        //this.cells = new Array(columns).fill(new Array(rows).fill(0));
-        this.cells = new Array(columns * rows).fill(0);
+        // The game surface cells indexed by row and then column
+        this.cells = this._createCells(columns, rows);
 
         // The current column index of the block
         this.col = Math.floor(columns / 2);
@@ -84,9 +83,23 @@ class TetrisModel {
         this.dropDelay = 1000;
     }
 
+    _createCells(cols, rows) {
+        let cells = new Array(rows);
+        for (let r = 0; r < rows; r++) {
+            cells[r] = new Array(cols).fill(0);
+        }
+
+        return cells;
+    }
+
     // Get a cell on the game surface disregarding the current block
     _getCell(col, row) {
-        return this.cells[col * this.columns + row];
+        //return this.cells[col * this.columns + row];
+        if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) {
+            return 0;
+        }
+
+        return this.cells[row][col];
     }
 
     // Get the status of a cell on the surface
@@ -103,7 +116,8 @@ class TetrisModel {
 
     // Set a cell on the surface
     _setCell(col, row, v) {
-        this.cells[col * this.columns + row] = v;
+        //this.cells[col * this.columns + row] = v;
+        this.cells[row][col] = v;
     }
 
     // Populate the block model with a new block chosen at random and reset the
@@ -182,7 +196,7 @@ class TetrisModel {
 
     // Drop the block straight down to a lockable position
     dropDown() {
-        while (this.isValidPosition(this.col, this.row + 1)) {
+        while (this.isValidPosition(this.col, this.row + 1, this.rotation)) {
             this.row += 1;
         }
     }
@@ -205,6 +219,26 @@ class TetrisModel {
     }
 
     collapse() {
+        let kept = []
+        let removed = [];
+        for (let r = 0; r < this.rows; r++) {
+            if (this.cells[r].reduce((acc, v) => acc + v, 0) == this.columns) {
+                removed.push(r);
+            } else {
+                kept.push(this.cells[r]);
+            }
+        }
+
+        for (let i = 0; i < removed.length; i++) {
+            kept.unshift(new Array(this.columns).fill(0));
+        }
+
+        this.cells = kept;
+
+        return removed
+    }
+
+    _collapse() {
         // Holds the cells that remain after the collapsable rows have been
         // removed
         let remaining = [];
@@ -372,7 +406,10 @@ function init() {
             case 'ArrowRight':
                 model.moveRight();
                 break;
-            case 'Space':
+            case 'ArrowUp':
+                model.rotate();
+                break;
+            case ' ':
                 model.dropDown();
                 break
         }
