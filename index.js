@@ -137,6 +137,9 @@ class TetrisModel {
         // A model of the current block
         this.block = this.nextBlock();
 
+        // A list of collapsed rows, will be updated upon each iteration
+        this.collapsed = []
+
         // The delay between each drop in milliseconds
         this.dropDelay = 1000;
 
@@ -352,6 +355,14 @@ class TetrisModel {
         return this.gameOver;
     }
 
+    setCollapsed(collapsed) {
+        this.collapsed = collapsed;
+    }
+
+    getCollapsed() {
+        return this.collapsed;
+    }
+
     advance(ts) {
         let collapsed = [];
 
@@ -368,6 +379,7 @@ class TetrisModel {
         if (!this.moveDown()) {
             this.lockPosition();
             collapsed = this.collapse();
+            this.setCollapsed(collapsed);
             this.block = this.nextBlock();
         }
 
@@ -396,11 +408,11 @@ class TetrisView {
         this.borderWidth = 2 * this.borderThickness + this.blocksWidth;
         this.borderHeight = 2 * this.borderThickness + this.blocksHeight;
 
-        this.xCanvasOffset = Math.floor((this.width - this.borderWidth) / 2);
-        this.yCanvasOffset = Math.floor((this.height - this.borderHeight) / 2);
+        this.xSurfaceOffset = Math.floor((this.width - this.borderWidth) / 2);
+        this.ySurfaceOffset = Math.floor((this.height - this.borderHeight) / 2);
 
-        this.xBlockOffset = Math.floor((canvas.width - (this.borderThickness + this.blocksWidth)) / 2);
-        this.yBlockOffset = Math.floor((canvas.height - (this.borderThickness + this.blocksHeight)) / 2);
+        this.xBlockOffset = Math.floor((canvas.width - (2 * this.borderThickness + this.blocksWidth)) / 2);
+        this.yBlockOffset = Math.floor((canvas.height - (2 * this.borderThickness + this.blocksHeight)) / 2);
 
         this.model = model;
 
@@ -453,8 +465,8 @@ class TetrisView {
     }
 
     clear() {
-        let xOrigin = this.xCanvasOffset;
-        let yOrigin = this.yCanvasOffset;
+        let xOrigin = this.xSurfaceOffset;
+        let yOrigin = this.ySurfaceOffset;
         let t = this.borderThickness;
 
         //this.ctx.fillStyle = 'rbga(255, 255, 255, 0.3)';
@@ -463,6 +475,7 @@ class TetrisView {
 
         this.ctx.strokeStyle = 'red';
         this.ctx.strokeRect(0, 0, this.width, this.height);
+        this.ctx.lineWidth = this.borderThickness;
         this.ctx.strokeStyle = 'black';
         this.ctx.strokeRect(xOrigin, yOrigin, this.borderWidth, this.borderHeight);
     };
@@ -484,11 +497,13 @@ class TetrisView {
         this.ctx.fill();
 
         return;
+
         if (colorIndex == 0) {
             // Don't stroke empty blocks
             return;
         }
 
+        this.ctx.lineWidth = 1;
         this.ctx.strokeStyle = 'black';
         this.ctx.strokeRect(xOrigin, yOrigin, s, s);
     }
