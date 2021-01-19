@@ -17,6 +17,66 @@ class Block1 {
     }
 }
 
+class BlockL1 {
+    // An L shape
+    constructor() {
+        this.coords = [new Coord(0, -2), new Coord(0, -1), new Coord(0, 0), new Coord(1, 0)];
+        this.color = 'rgba(255, 0, 0, 0)';
+    }
+
+    clone()  {
+        return new Block1()
+    }
+}
+
+class BlockL2 {
+    // An inverted L shape
+    constructor() {
+        this.coords = [new Coord(0, -2), new Coord(0, -1), new Coord(-1, 0), new Coord(0, 0)];
+        this.color = 'rgba(255, 0, 0, 0)';
+    }
+
+    clone()  {
+        return new Block1()
+    }
+}
+
+class BlockA1 {
+    // An angle shape
+    constructor() {
+        this.coords = [new Coord(0, -1), new Coord(0, 0), new Coord(1, 0)];
+        this.color = 'rgba(255, 0, 0, 0)';
+    }
+
+    clone()  {
+        return new Block1()
+    }
+}
+
+class BlockA2 {
+    // An inverted angle shape
+    constructor() {
+        this.coords = [new Coord(0, -1), new Coord(-1, 0), new Coord(0, 0)];
+        this.color = 'rgba(255, 0, 0, 0)';
+    }
+
+    clone()  {
+        return new Block1()
+    }
+}
+
+class BlockI {
+    // An I shape
+    constructor() {
+        this.coords = [new Coord(0, -2), new Coord(0, -1), new Coord(0, 0), new Coord(0, 1)];
+        this.color = 'rgba(255, 0, 0, 0)';
+    }
+
+    clone()  {
+        return new Block1()
+    }
+}
+
 class BlockModel {
     constructor(block) {
         this.block = block;
@@ -379,13 +439,13 @@ let view;
 let clock = 0;
 
 function gameLoop() {
-    //let ts = performance.now();
-    let ts = clock;
+    let ts = performance.now();
+    //let ts = clock;
     model.advance(ts);
 
     view.draw();
-    //window.requestAnimationFrame(gameLoop);
-    clock += 1000;
+    window.requestAnimationFrame(gameLoop);
+    //clock += 1000;
 }
 
 function init() {
@@ -395,7 +455,7 @@ function init() {
     canvas.height = 800;
     let columns = 10;
     let rows = 20;
-    model = new TetrisModel(columns, rows, [new Block1()])
+    model = new TetrisModel(columns, rows, [new Block1(), new BlockL1(), new BlockL2(), new BlockA1(), new BlockA2(), new BlockI()])
     view = new TetrisView(canvas, model);
 
     window.addEventListener('keydown', (event) => {
@@ -415,7 +475,7 @@ function init() {
         }
     });
 
-    //gameLoop();
+    gameLoop();
     //window.setInterval(gameLoop, 1000);
-    document.getElementById("button").onclick = gameLoop;
+    //document.getElementById("button").onclick = gameLoop;
 }
