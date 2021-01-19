@@ -18,47 +18,38 @@ class Block1 {
 }
 
 class BlockModel {
-    constructor(block, col, row) {
-        this.col = col;
-        this.row = row;
+    constructor(block) {
         this.block = block;
         this.coords = block.coords.map((c) => new Coord(c.col, c.row));
-
-        this.updateCoords(col, row);
     }
 
     clone() {
         return new BlockModel(this.block, this.col, this.row);
     }
 
-    updateCoords(col, row) {
-        console.log(`updateCoords(${col}, ${row})`);
-        this.col = col;
-        this.row = row;
-        for (let c of this.coords) {
-            c.col = c.col + col;
-            c.row = c.row + row;
-        }
-    }
-
     rotate(q) {
         let theta = q * Math.PI / 2;
-        let sinThetha = Math.sin(theta);
-        let cosThetha = Math.cos(theta);
+        let sinTheta = Math.sin(theta);
+        let cosTheta = Math.cos(theta);
 
-        this.block.coords.forEach((c) => {
-            c.col = Math.round(c.col * cosTheta - c.row * sinTheta);
-            c.row = Math.round(c.col * sinTheta + c.row * cosTheta);
-        });
-    }
-
-    hasCoord(col, row) {
-        return this.coords.some((c) => c.col == col && c.row == row);
+        return this.block.coords.map((c) => new Coord(
+            Math.round(c.col * cosTheta - c.row * sinTheta),
+            Math.round(c.col * sinTheta + c.row * cosTheta)
+        ));
     }
 
     // Get the block's current coordinates
-    getCoords() {
-        return this.coords;
+    getCoordsRelative(col, row, rot) {
+        //return this.rotate(rot).map((c) => new Coord(c.col + col, c.row + row));
+
+        let rotated = this.rotate(rot);
+        let rel = rotated.map((c) => new Coord(c.col + col, c.row + row));
+        return rel;
+    }
+
+    hasCoord(col, row, rot) {
+        //return this.coords.some((c) => c.col == col && c.row == row);
+        return this.getCoordsRelative(col, row, rot).some((c) => c.col == col && c.row == row);
     }
 };
 
@@ -80,14 +71,14 @@ class TetrisModel {
         // The current row index of the block
         this.row = 0;
 
+        // The current rotation of the block
+        this.rotation = 0;
+
         // An array of block shapes
         this.blockShapes = blockShapes;
 
         // A model of the current block
         this.block = this.nextBlock();
-
-        // A model of the current block used to test positions
-        this.testBlock = this.block.clone();
 
         // The delay between each drop in milliseconds
         this.dropDelay = 1000;
@@ -106,7 +97,8 @@ class TetrisModel {
         }
 
         // Return whether the current block is occupying the cell or not
-        return this.block.hasCoord(col, row) ? 1 : 0;
+        return this.block.getCoordsRelative(this.col, this.row, this.rotation).
+            some((c) => c.col == col && c.row == row);
     }
 
     // Set a cell on the surface
@@ -125,15 +117,14 @@ class TetrisModel {
     }
 
     // Test if postion col/row is valid for the current block
-    isValidPosition(col, row) {
-        this.testBlock.updateCoords(col, row);
-        let coords = this.testBlock.getCoords(col, row);
+    isValidPosition(col, row, rot) {
+        let coords = this.block.getCoordsRelative(col, row, rot);
 
         for (let c of coords) {
             let isVacant = this._getCell(c.col, c.row) != 0;
             let isWithinLeftRightMargin = c.col < 0 || c.col >= this.columns;
-            let isAboveBottomLine = c.row > this.rows;
-            if (isVacant || isWithinLeftRightMargin || isAboveBottomLine) {
+            let isBelowBottomLine = c.row >= this.rows;
+            if (isVacant || isWithinLeftRightMargin || isBelowBottomLine) {
                 return false;
             }
         }
@@ -144,11 +135,11 @@ class TetrisModel {
     // Move the block to the right if possible. If the move is possible the
     // column coordinate is updated. Return whether the move was possible.
     moveRight() {
-        if (!this.isValidPosition(this.col + 1, this.row)) {
+        if (!this.isValidPosition(this.col + 1, this.row, this.rotation)) {
             return false;
         }
 
-        this.block.updateCoords(this.col + 1, this.row);
+        // Position was valid update the column
         this.col += 1;
         return true;
     }
@@ -156,12 +147,11 @@ class TetrisModel {
     // Move the block to the left if possible. If the move is possible the
     // column coordinate is updated. Return whether the move was possible.
     moveLeft() {
-        if (!this.isValidPosition(this.col - 1, this.row)) {
+        if (!this.isValidPosition(this.col - 1, this.row, this.rotation)) {
             return false;
         }
 
         // Position was valid update the column
-        this.block.updateCoords(this.col - 1, this.row);
         this.col -= 1;
         return true;
     }
@@ -169,12 +159,11 @@ class TetrisModel {
     // Move the block downwards if possible. If the move is possible the
     // row coordinate is updated. Return whether the move was possible.
     moveDown() {
-        if (!this.isValidPosition(this.col, this.row + 1)) {
+        if (!this.isValidPosition(this.col, this.row + 1, this.rotation)) {
             return false;
         }
 
-        // Position was valid update the column
-        this.block.updateCoords(this.col, this.row + 1);
+        // Position was valid update the row
         this.row += 1;
         return true;
     }
@@ -182,17 +171,12 @@ class TetrisModel {
     // Rotate the block if possible. If the rotation is possible the rotation is
     // updated. Return whether the rotation was possible.
     rotate() {
-        // Rotate the block to the new position
-        this.testBlock.rotate(1);
-
         // Check if the rotated block is in a valid position
-        if (!this.isValidPosition(this.col, this.row)) {
-            // If the new position is not valid reset the rotation
-            this.testBlock.rotate(-1);
+        if (!this.isValidPosition(this.col, this.row, this.rotation + 1)) {
             return false;
         }
 
-        this.block.rotate(1);
+        this.rotation += 1;
         return true;
     }
 
@@ -201,8 +185,6 @@ class TetrisModel {
         while (this.isValidPosition(this.col, this.row + 1)) {
             this.row += 1;
         }
-
-        this.block.updateCoords(this.col, this.row);
     }
 
     // Return whether the block is in a lockable position
@@ -216,7 +198,8 @@ class TetrisModel {
     // Lock the position of the block. Assumes that the block is in a lockable
     // position.
     lockPosition() {
-        for (let c of this.block.getCoords()) {
+        let coords = this.block.getCoordsRelative(this.col, this.row, this.rotation);
+        for (let c of coords) {
             this._setCell(c.col, c.row, 1);
         }
     }
@@ -249,50 +232,34 @@ class TetrisModel {
         if (this.ts === undefined) {
             // This is the first iteration
             this.ts = ts;
-            return false;
+            return 0;
         }
 
         let dt = ts - this.ts;
         if (dt < this.dropDelay) {
             // It's not time to update yet
-            return false;
+            return 0;
         }
 
-        // Advance the block according to the timestamp
         console.log(`dt: ${dt}`);
-        this.row += Math.floor(dt / this.dropDelay);
-        //console.log(`Row: ${this.row}`);
-
         this.ts = ts;
-        return true;
+        return Math.floor(dt / this.dropDelay);
     }
 
     advance(ts) {
-        if (!this.update(ts)) {
+        let n = this.update(ts);
+        if (n == 0) {
             return;
         }
 
-        console.log(`Row: ${this.row}`)
+        console.log(`N: ${n}\tRow/Col: ${this.row}/${this.col}`)
 
         if (!this.moveDown()) {
             this.lockPosition();
             this.collapse();
             this.block = this.nextBlock();
-            this.testBlock = this.block.clone();
             return;
         }
-
-        /*
-        if (this.isLockable()) {
-            this.lockPosition();
-            this.collapse();
-            this.block = this.nextBlock();
-            this.testBlock = this.block.clone();
-            return;
-        }
-
-        this.moveDown();
-        */
     }
 };
 
