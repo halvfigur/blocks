@@ -455,7 +455,7 @@ class TetrisView {
     clear() {
         let xOrigin = this.xCanvasOffset;
         let yOrigin = this.yCanvasOffset;
-        let s = this.borderThickness;
+        let t = this.borderThickness;
 
         //this.ctx.fillStyle = 'rbga(255, 255, 255, 0.3)';
         //this.ctx.fillStyle = 'rbga(255, 255, 255, 1.0)';
@@ -467,9 +467,10 @@ class TetrisView {
         this.ctx.strokeRect(xOrigin, yOrigin, this.borderWidth, this.borderHeight);
     };
 
-    drawBlock(x, y, color) {
-        let xOrigin = this.xBlockOffset + x * this.blockSize;
-        let yOrigin = this.yBlockOffset + y * this.blockSize;
+    drawBlock(x, y, colorIndex) {
+        let color = this.palette[colorIndex];
+        let xOrigin = this.borderThickness + this.xBlockOffset + x * this.blockSize;
+        let yOrigin = this.borderThickness + this.yBlockOffset + y * this.blockSize;
         let s = this.blockSize;
 
         this.ctx.beginPath()
@@ -482,6 +483,12 @@ class TetrisView {
         this.ctx.fillStyle = color;
         this.ctx.fill();
 
+        return;
+        if (colorIndex == 0) {
+            // Don't stroke empty blocks
+            return;
+        }
+
         this.ctx.strokeStyle = 'black';
         this.ctx.strokeRect(xOrigin, yOrigin, s, s);
     }
@@ -492,8 +499,7 @@ class TetrisView {
         for (let c = 0; c < this.model.columns; c++) {
             for (let r = 0; r < this.model.rows; r++) {
                 let colorIndex = this.model.getCellColor(c, r);
-                let color = this.palette[colorIndex];
-                this.drawBlock(c, r, color);
+                this.drawBlock(c, r, colorIndex);
             }
         }
     };
@@ -530,6 +536,9 @@ function init() {
                 break;
             case 'ArrowRight':
                 model.moveRight();
+                break;
+            case 'ArrowDown':
+                model.moveDown();
                 break;
             case 'ArrowUp':
                 model.rotate();
