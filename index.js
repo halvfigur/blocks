@@ -5,75 +5,84 @@ class Coord {
     }
 }
 
-class Block1 {
+class Block {
+    static baseColor = 1;
+
+    constructor(coords) {
+        this.coords = coords;
+        this.color = this.baseColor++;
+    }
+
+    getCoords() {
+        return this.coords;
+    }
+
+    getColor() {
+        return this.color;
+    }
+
+    rotate(q) {
+        let theta = q * Math.PI / 2;
+        let sinTheta = Math.sin(theta);
+        let cosTheta = Math.cos(theta);
+
+        return this.coords.map((c) => new Coord(
+            Math.round(c.col * cosTheta - c.row * sinTheta),
+            Math.round(c.col * sinTheta + c.row * cosTheta)
+        ));
+    }
+}
+
+class Block1 extends Block {
     // A T shape
     constructor() {
-        this.coords = [new Coord(0, -1), new Coord(-1, 0), new Coord(0, 0), new Coord(1, 0)];
-        this.color = 'rgba(255, 0, 0, 0)';
-    }
-
-    clone()  {
-        return new Block1()
+        super([new Coord(0, -1), new Coord(-1, 0), new Coord(0, 0), new Coord(1, 0)]);
     }
 }
 
-class BlockL1 {
+class BlockL1 extends Block {
     // An L shape
     constructor() {
-        this.coords = [new Coord(0, -2), new Coord(0, -1), new Coord(0, 0), new Coord(1, 0)];
-        this.color = 'rgba(255, 0, 0, 0)';
-    }
-
-    clone()  {
-        return new Block1()
+        super([new Coord(0, -2), new Coord(0, -1), new Coord(0, 0), new Coord(1, 0)]);
     }
 }
 
-class BlockL2 {
+class BlockL2 extends Block {
     // An inverted L shape
     constructor() {
-        this.coords = [new Coord(0, -2), new Coord(0, -1), new Coord(-1, 0), new Coord(0, 0)];
-        this.color = 'rgba(255, 0, 0, 0)';
-    }
-
-    clone()  {
-        return new Block1()
+        super([new Coord(0, -2), new Coord(0, -1), new Coord(-1, 0), new Coord(0, 0)]);
     }
 }
 
-class BlockA1 {
+class BlockA1 extends Block {
     // An angle shape
     constructor() {
-        this.coords = [new Coord(0, -1), new Coord(0, 0), new Coord(1, 0)];
-        this.color = 'rgba(255, 0, 0, 0)';
-    }
-
-    clone()  {
-        return new Block1()
+        super([new Coord(0, -1), new Coord(0, 0), new Coord(1, 0)]);
     }
 }
 
-class BlockA2 {
+class BlockA2 extends Block {
     // An inverted angle shape
     constructor() {
-        this.coords = [new Coord(0, -1), new Coord(-1, 0), new Coord(0, 0)];
-        this.color = 'rgba(255, 0, 0, 0)';
-    }
-
-    clone()  {
-        return new Block1()
+        super([new Coord(0, -1), new Coord(-1, 0), new Coord(0, 0)]);
     }
 }
 
-class BlockI {
+class BlockI extends Block {
     // An I shape
     constructor() {
-        this.coords = [new Coord(0, -2), new Coord(0, -1), new Coord(0, 0), new Coord(0, 1)];
-        this.color = 'rgba(255, 0, 0, 0)';
+        super([new Coord(0, -2), new Coord(0, -1), new Coord(0, 0), new Coord(0, 1)]);
+    }
+}
+
+class BlockS extends Block {
+    // A square shape
+    constructor() {
+        super([new Coord(0, -1), new Coord(1, -1), new Coord(0, 0), new Coord(1, 0)]);
     }
 
-    clone()  {
-        return new Block1()
+    rotate() {
+        return this.coords.map((c) => new Coord(c.col, c.row));
     }
 }
 
@@ -83,26 +92,15 @@ class BlockModel {
         this.coords = block.coords.map((c) => new Coord(c.col, c.row));
     }
 
-    clone() {
-        return new BlockModel(this.block, this.col, this.row);
-    }
-
     rotate(q) {
-        let theta = q * Math.PI / 2;
-        let sinTheta = Math.sin(theta);
-        let cosTheta = Math.cos(theta);
-
-        return this.block.coords.map((c) => new Coord(
-            Math.round(c.col * cosTheta - c.row * sinTheta),
-            Math.round(c.col * sinTheta + c.row * cosTheta)
-        ));
+        return this.block.rotate(q);
     }
 
     // Get the block's current coordinates
     getCoordsRelative(col, row, rot) {
         //return this.rotate(rot).map((c) => new Coord(c.col + col, c.row + row));
 
-        let rotated = this.rotate(rot);
+        let rotated = this.block.rotate(rot);
         let rel = rotated.map((c) => new Coord(c.col + col, c.row + row));
         return rel;
     }
@@ -121,11 +119,18 @@ class TetrisModel {
         // The height of the game surface
         this.rows = rows;
 
+        // An array of block shapes
+        this.blockShapes = blockShapes;
+
+        this.reset();
+    }
+
+    reset() {
         // The game surface cells indexed by row and then column
-        this.cells = this._createCells(columns, rows);
+        this.cells = this._createCells(this.columns, this.rows);
 
         // The current column index of the block
-        this.col = Math.floor(columns / 2);
+        this.col = Math.floor(this.columns / 2);
 
         // The current row index of the block
         this.row = 0;
@@ -133,14 +138,22 @@ class TetrisModel {
         // The current rotation of the block
         this.rotation = 0;
 
-        // An array of block shapes
-        this.blockShapes = blockShapes;
-
         // A model of the current block
         this.block = this.nextBlock();
 
         // The delay between each drop in milliseconds
         this.dropDelay = 1000;
+
+        // Indicates whether to skip the delay, applicable when blocks are
+        // dropped
+        this.skipDelay = false;
+
+        // Indicates whether the game has reached it end state
+        this.gameOver = false;
+    }
+
+    getNbrShapes() {
+        return this.blockShapes.length;
     }
 
     _createCells(cols, rows) {
@@ -176,8 +189,12 @@ class TetrisModel {
 
     // Set a cell on the surface
     _setCell(col, row, v) {
-        //this.cells[col * this.columns + row] = v;
+        if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) {
+            return false;
+        }
+
         this.cells[row][col] = v;
+        return true;
     }
 
     // Populate the block model with a new block chosen at random and reset the
@@ -259,6 +276,8 @@ class TetrisModel {
         while (this.isValidPosition(this.col, this.row + 1, this.rotation)) {
             this.row += 1;
         }
+
+        this.setSkipDelay(true);
     }
 
     // Return whether the block is in a lockable position
@@ -274,7 +293,9 @@ class TetrisModel {
     lockPosition() {
         let coords = this.block.getCoordsRelative(this.col, this.row, this.rotation);
         for (let c of coords) {
-            this._setCell(c.col, c.row, 1);
+            if (!this._setCell(c.col, c.row, 1)) {
+                this.setGameOver();
+            }
         }
     }
 
@@ -282,7 +303,7 @@ class TetrisModel {
         let kept = []
         let removed = [];
         for (let r = 0; r < this.rows; r++) {
-            if (this.cells[r].reduce((acc, v) => acc + v, 0) == this.columns) {
+            if (this.cells[r].reduce((acc, v) => acc + (v > 0 ? 1 : 0), 0) == this.columns) {
                 removed.push(r);
             } else {
                 kept.push(this.cells[r]);
@@ -298,35 +319,17 @@ class TetrisModel {
         return removed
     }
 
-    _collapse() {
-        // Holds the cells that remain after the collapsable rows have been
-        // removed
-        let remaining = [];
-
-        // To holds the indices of the rows that where collapsed
-        let removed = [];
-        for (let r = 0; r < this.rows; r++) {
-            let row = this.cells.slice(r * this.columns, (r + 1) * this.columns);
-            if (row.reduce((acc, v) => {
-                return acc + v;
-            }, 0) != this.columns) {
-                // This row cannot be collapsed
-                remaining = remaining.concat(row);
-            } else {
-                // This one can
-                removed.push(Math.floor(r / this.columns));
-            }
-        }
-
-        this.cells = remaining;
-        return removed;
-    }
-
     update(ts) {
         if (this.ts === undefined) {
             // This is the first iteration
             this.ts = ts;
             return 0;
+        }
+
+        if (this.isSkipDelay()) {
+            this.setSkipDelay(false);
+            this.ts = ts;
+            return 1;
         }
 
         let dt = ts - this.ts;
@@ -340,20 +343,44 @@ class TetrisModel {
         return Math.floor(dt / this.dropDelay);
     }
 
+    setSkipDelay(skip) {
+        this.skipDelay = skip;
+    }
+
+    isSkipDelay() {
+        return this.skipDelay;
+    }
+
+    setGameOver() {
+        this.gameOver = true;
+    }
+
+    isGameOver() {
+        return this.gameOver;
+    }
+
     advance(ts) {
+        let collapsed = [];
+
+        if (this.isGameOver()) {
+            console.log("Game over!");
+            return collapsed;
+        }
+
         let n = this.update(ts);
         if (n == 0) {
-            return;
+            return collapsed;
         }
 
         console.log(`N: ${n}\tRow/Col: ${this.row}/${this.col}`)
 
         if (!this.moveDown()) {
             this.lockPosition();
-            this.collapse();
+            collapsed = this.collapse();
             this.block = this.nextBlock();
-            return;
         }
+
+        return collapsed;
     }
 };
 
@@ -392,9 +419,9 @@ class TetrisView {
         let yOrigin = this.yCanvasOffset;
         let s = this.borderThickness;
 
-        // ctx.fillStyle = 'rbga(255, 255, 255, 0.3)';
-        this.ctx.fillStyle = 'rbga(255, 255, 255, 1.0)';
-        this.ctx.fillRect(xOrigin, yOrigin, this.borderWidth, this.borderHeight);
+        //this.ctx.fillStyle = 'rbga(255, 255, 255, 0.3)';
+        //this.ctx.fillStyle = 'rbga(255, 255, 255, 1.0)';
+        //this.ctx.fillRect(xOrigin, yOrigin, this.borderWidth, this.borderHeight);
 
         this.ctx.strokeStyle = 'red';
         this.ctx.strokeRect(0, 0, this.width, this.height);
@@ -427,7 +454,7 @@ class TetrisView {
 
         for (let c = 0; c < this.model.columns; c++) {
             for (let r = 0; r < this.model.rows; r++) {
-                let color = this.model.getCell(c, r) > 0 ? 'rgba(255, 0, 0, 1.0)' : 'rgba(255, 255, 255, 1.0)';
+                let color = this.model.getCell(c, r) > 0 ? 'rgba(255, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)';
                 this.drawBlock(c, r, color);
             }
         }
@@ -455,7 +482,7 @@ function init() {
     canvas.height = 800;
     let columns = 10;
     let rows = 20;
-    model = new TetrisModel(columns, rows, [new Block1(), new BlockL1(), new BlockL2(), new BlockA1(), new BlockA2(), new BlockI()])
+    model = new TetrisModel(columns, rows, [new Block1(), new BlockL1(), new BlockL2(), new BlockA1(), new BlockA2(), new BlockI(), new BlockS()])
     view = new TetrisView(canvas, model);
 
     window.addEventListener('keydown', (event) => {
