@@ -6,19 +6,12 @@ class Coord {
 }
 
 class Block {
-    static baseColor = 1;
-
     constructor(coords) {
         this.coords = coords;
-        this.color = this.baseColor++;
     }
 
     getCoords() {
         return this.coords;
-    }
-
-    getColor() {
-        return this.color;
     }
 
     rotate(q) {
@@ -138,6 +131,9 @@ class TetrisModel {
         // The current rotation of the block
         this.rotation = 0;
 
+        // The current block type index
+        this.blockTypeIndex = 0;
+
         // A model of the current block
         this.block = this.nextBlock();
 
@@ -175,16 +171,15 @@ class TetrisModel {
         return this.cells[row][col];
     }
 
-    // Get the status of a cell on the surface
-    getCell(col, row) {
-        // If the cells is "locked" we can return immediately
-        if (this._getCell(col, row) == 1) {
-            return 1;
+    // Get the cell color
+    getCellColor(col, row) {
+        // Return whether the current block is occupying the cell or not
+        if (this.block.getCoordsRelative(this.col, this.row, this.rotation).some((c) => c.col == col && c.row == row)) {
+            let color = this.blockTypeIndex + 1;
+            return color;
         }
 
-        // Return whether the current block is occupying the cell or not
-        return this.block.getCoordsRelative(this.col, this.row, this.rotation).
-            some((c) => c.col == col && c.row == row);
+        return this._getCell(col, row);
     }
 
     // Set a cell on the surface
@@ -202,9 +197,9 @@ class TetrisModel {
     nextBlock() {
         this.col = this.columns / 2;
         this.row = 0;
-        let i = Math.floor(Math.random() * this.blockShapes.length);
+        this.blockTypeIndex = Math.floor(Math.random() * this.blockShapes.length);
 
-        return new BlockModel(this.blockShapes[i], this.col, this.row);
+        return new BlockModel(this.blockShapes[this.blockTypeIndex], this.col, this.row);
     }
 
     // Test if postion col/row is valid for the current block
@@ -283,7 +278,6 @@ class TetrisModel {
     // Return whether the block is in a lockable position
     isLockable() {
         let lockable = !this.isValidPosition(this.col, this.row + 1);
-        console.log(`Lockable: ${lockable}`);
         return lockable;
         //return !this.isValidPosition(this.col, this.row + 1)
     }
@@ -293,7 +287,7 @@ class TetrisModel {
     lockPosition() {
         let coords = this.block.getCoordsRelative(this.col, this.row, this.rotation);
         for (let c of coords) {
-            if (!this._setCell(c.col, c.row, 1)) {
+            if (!this._setCell(c.col, c.row, this.blockTypeIndex + 1)) {
                 this.setGameOver();
             }
         }
@@ -338,7 +332,6 @@ class TetrisModel {
             return 0;
         }
 
-        console.log(`dt: ${dt}`);
         this.ts = ts;
         return Math.floor(dt / this.dropDelay);
     }
@@ -371,8 +364,6 @@ class TetrisModel {
         if (n == 0) {
             return collapsed;
         }
-
-        console.log(`N: ${n}\tRow/Col: ${this.row}/${this.col}`)
 
         if (!this.moveDown()) {
             this.lockPosition();
@@ -412,6 +403,53 @@ class TetrisView {
         this.yBlockOffset = Math.floor((canvas.height - (this.borderThickness + this.blocksHeight)) / 2);
 
         this.model = model;
+
+        this.palette = this.generatePalette('rgba(255, 255, 255, 1.0)', model.getNbrShapes());
+    }
+
+    generatePalette(emptyColor, nColors) {
+        let colors = [emptyColor];
+
+        for (let n = 0; n < nColors; n++) {
+            //let h = Math.random();
+            let h = n / nColors;
+            let s = 0.5;
+            let v = 0.95;
+
+            let h_i = Math.floor((h * 6));
+            let f = h * 6 - h_i;
+            let p = v * (1 - s);
+            let q = v * (1 - f * s);
+            let t = v * (1 - (1 - f) * s);
+
+            v = Math.floor(256 * v);
+            t = Math.floor(256 * t);
+            p = Math.floor(256 * p);
+            q = Math.floor(256 * q);
+
+            switch (h_i) {
+                case 0:
+                    colors.push(`rgba(${v}, ${t}, ${p}, 1.0)`);
+                    break;
+                case 1:
+                    colors.push(`rgba(${q}, ${v}, ${p}, 1.0)`);
+                    break;
+                case 2:
+                    colors.push(`rgba(${p}, ${v}, ${t}, 1.0)`);
+                    break;
+                case 3:
+                    colors.push(`rgba(${p}, ${q}, ${v}, 1.0)`);
+                    break;
+                case 4:
+                    colors.push(`rgba(${t}, ${p}, ${v}, 1.0)`);
+                    break;
+                case 5:
+                    colors.push(`rgba(${v}, ${p}, ${q}, 1.0)`);
+                    break;
+            }
+        }
+
+        return colors;
     }
 
     clear() {
@@ -439,7 +477,6 @@ class TetrisView {
         this.ctx.lineTo(xOrigin + s, yOrigin); // top
         this.ctx.lineTo(xOrigin + s, yOrigin + s); // right
         this.ctx.lineTo(xOrigin, yOrigin + s); // bottom
-        //ctx.lineTo(originX, originY); // left
         this.ctx.closePath();
 
         this.ctx.fillStyle = color;
@@ -454,7 +491,8 @@ class TetrisView {
 
         for (let c = 0; c < this.model.columns; c++) {
             for (let r = 0; r < this.model.rows; r++) {
-                let color = this.model.getCell(c, r) > 0 ? 'rgba(255, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)';
+                let colorIndex = this.model.getCellColor(c, r);
+                let color = this.palette[colorIndex];
                 this.drawBlock(c, r, color);
             }
         }
