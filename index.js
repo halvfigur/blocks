@@ -387,10 +387,131 @@ class TetrisModel {
     }
 };
 
+class Particle {
+    constructor(m, x, y, dx, dy) {
+        this.m = m;
+        this.x = x;
+        this.y = y;
+        this.dx = dx;
+        this.dy = dy;
+        this.fy = 0;
+        this.fx = 0;
+    }
+
+    updateForce(fx, fy) {
+        this.fx += fx;
+        this.fy += fy;
+    }
+
+    update(dt) {
+        // Update velocity according to the force acting upon the particle
+        this.dx += this.fx / this.m;
+        this.dy += this.fy / this.m;
+
+        // Update the position according to the velocity
+        this.x += this.dx * dt;
+        this.y += this.dy * dt;
+
+        // Reset the forces so that they are fresh upon the next iteration
+        this.fx = 0;
+        this.fy = 0;
+    }
+}
+
+class ParticlesModel {
+    constructor(nParticles, width, height) {
+        this.width = width;
+        this.height = height;
+        this.particles = this._createParticles(nParticles);
+        this.centerParticle = new Particle(100, this.width / 2, this.height / 2, 0, 0);
+    }
+
+    _createParticles(nParticles) {
+        let particles = [];
+        let centerX = this.width / 2;
+        let centerY = this.height / 2;
+
+        for (let n = 0; n < 30; n++) {
+            let x = this.width / 2 + 0.1 * this.width * (0.5 - Math.random());
+            let y = this.height / 2 + 0.1 * this.height * (0.5 - Math.random());
+            let dx = 1 * (0.5 - Math.random());
+            let dy = 1 * (0.5 - Math.random());
+            let m = 10 * Math.random();
+            particles.push(new Particle(m, x, y, dx, dy));
+        }
+        // particles.push(new Particle(10, centerX - 10, centerY , 0, 5));
+        // particles.push(new Particle(10, centerX + 10, centerY, 0, -5));
+
+        return particles;
+    }
+
+    getParticles() {
+        return this.particles;
+    }
+
+    calcParticleInteraction(alpha, beta) {
+        let dx = beta.x - alpha.x;
+        let dy = beta.y - alpha.y;
+        let d = Math.max(10, this.distance(dx, dy));
+
+        let f = this.force(alpha.m, beta.m, d);
+
+        // Split the force into its components
+        let fx = f * dx / d;
+        let fy = f * dy / d;
+
+        alpha.updateForce(fx, fy);
+        beta.updateForce(-fx, -fy);
+    }
+
+    update(ts) {
+        if (this.ts === undefined) {
+            this.ts = ts;
+            return;
+        }
+
+        for (let i = 0; i < this.particles.length - 1; i++) {
+            for (let j = i + 1; j < this.particles.length; j++) {
+                let alpha = this.particles[i];
+                let beta = this.particles[j];
+
+                this.calcParticleInteraction(alpha, beta);
+            }
+        }
+
+        let dt = (ts - this.ts) * 0.001;
+
+        for (let p of this.particles) {
+            this.calcParticleInteraction(this.centerParticle, p);
+        }
+
+        for (let p of this.particles) {
+            p.update(dt);
+        }
+
+        this.centerParticle.fx = 0;
+        this.centerParticle.fy = 0;
+
+        this.ts = ts;
+    }
+
+    // Calculate the force two masses separated by a distance excert on each other
+    force(m1, m2, d) {
+        // Omit the gravitationaly constant in the calculation
+        return 1* (m1 * m2) / (d * d);
+    }
+
+    // Calculate distance between to particles
+    distance(dx, dy) {
+        // Should probably use Newton Rhapson
+        return Math.sqrt(dx*dx + dy*dy);
+    }
+}
+
 // Rendering
 
 class TetrisView {
-    constructor(canvas, model) {
+    constructor(canvas, model, particlesModel) {
         this.ctx = canvas.getContext('2d');
 
         // TODO compensate if the width and height can't fit the model properly
@@ -415,6 +536,7 @@ class TetrisView {
         this.yBlockOffset = Math.floor((canvas.height - (2 * this.borderThickness + this.blocksHeight)) / 2);
 
         this.model = model;
+        this.particlesModel;
 
         this.palette = this.generatePalette('rgba(255, 255, 255, 1.0)', model.getNbrShapes());
     }
@@ -480,6 +602,11 @@ class TetrisView {
         this.ctx.strokeRect(xOrigin, yOrigin, this.borderWidth, this.borderHeight);
     };
 
+    clearCanvas() {
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+    }
+
     drawBlock(x, y, colorIndex) {
         let color = this.palette[colorIndex];
         let xOrigin = this.borderThickness + this.xBlockOffset + x * this.blockSize;
@@ -508,19 +635,40 @@ class TetrisView {
         this.ctx.strokeRect(xOrigin, yOrigin, s, s);
     }
 
-    draw() {
-        this.clear();
-
+    drawBlocks() {
         for (let c = 0; c < this.model.columns; c++) {
             for (let r = 0; r < this.model.rows; r++) {
                 let colorIndex = this.model.getCellColor(c, r);
                 this.drawBlock(c, r, colorIndex);
             }
         }
+    }
+
+    drawParticles() {
+        this.ctx.lineWidth = 3;
+        this.ctx.strokeStyle = 'black';
+        for (let p of particlesModel.getParticles()) {
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, 10, 0, 2*Math.PI);
+            this.ctx.stroke();
+        }
+
+        this.ctx.strokeStyle = 'red';
+        this.ctx.beginPath();
+        this.ctx.arc(particlesModel.centerParticle.x, particlesModel.centerParticle.y, 10, 0, 2*Math.PI);
+        this.ctx.stroke();
+    }
+
+    draw() {
+        this.clearCanvas();
+        //this.clear();
+        this.drawBlocks();
+        this.drawParticles();
     };
 }
 
 let model;
+let particlesModel;
 let view;
 let clock = 0;
 
@@ -528,6 +676,7 @@ function gameLoop() {
     let ts = performance.now();
     //let ts = clock;
     model.advance(ts);
+    particlesModel.update(ts);
 
     view.draw();
     window.requestAnimationFrame(gameLoop);
@@ -542,7 +691,8 @@ function init() {
     let columns = 10;
     let rows = 20;
     model = new TetrisModel(columns, rows, [new Block1(), new BlockL1(), new BlockL2(), new BlockA1(), new BlockA2(), new BlockI(), new BlockS()])
-    view = new TetrisView(canvas, model);
+    particlesModel = new ParticlesModel(2, canvas.width, canvas.height);
+    view = new TetrisView(canvas, model, particlesModel);
 
     window.addEventListener('keydown', (event) => {
         switch (event.key) {
