@@ -296,6 +296,17 @@ class TetrisModel {
         }
     }
 
+    getCollapsable() {
+        let collapsable = [];
+        for (let r = 0; r < this.rows; r++) {
+            if (this.cells[r].reduce((acc, v) => acc + (v > 0 ? 1 : 0), 0) == this.columns) {
+                collapsable.push(r);
+            }
+        }
+
+        return collapsable;
+    }
+
     collapse() {
         let kept = []
         let removed = [];
@@ -313,7 +324,7 @@ class TetrisModel {
 
         this.cells = kept;
 
-        return removed
+        return removed;
     }
 
     update(ts) {
@@ -355,40 +366,33 @@ class TetrisModel {
         return this.gameOver;
     }
 
-    setCollapsed(collapsed) {
-        this.collapsed = collapsed;
-    }
-
-    getCollapsed() {
-        return this.collapsed;
-    }
-
-    advance(ts) {
-        let collapsed = [];
-
+    prepareNextMove(ts) {
         if (this.isGameOver()) {
             console.log("Game over!");
-            return collapsed;
+            return false;
         }
 
         let n = this.update(ts);
         if (n == 0) {
-            return collapsed;
+            return false;
         }
 
         if (!this.moveDown()) {
             this.lockPosition();
-            collapsed = this.collapse();
-            this.setCollapsed(collapsed);
-            this.block = this.nextBlock();
+            return true;
         }
 
-        return collapsed;
+        return false;
+    }
+
+    makeNextMove() {
+        this.collapse();
+        this.block = this.nextBlock();
     }
 };
 
 class Particle {
-    constructor(m, x, y, dx, dy) {
+    constructor(m, x, y, dx, dy, data) {
         this.m = m;
         this.x = x;
         this.y = y;
@@ -396,6 +400,7 @@ class Particle {
         this.dy = dy;
         this.fy = 0;
         this.fx = 0;
+        this.data = data;
     }
 
     updateForce(fx, fy) {
@@ -416,34 +421,45 @@ class Particle {
         this.fx = 0;
         this.fy = 0;
     }
+
+    getData() {
+        return this.data;
+    }
 }
 
 class ParticlesModel {
     constructor(nParticles, width, height) {
         this.width = width;
         this.height = height;
-        this.particles = this._createParticles(nParticles);
-        this.centerParticle = new Particle(100, this.width / 2, this.height / 2, 0, 0);
+        this.particles = [];
     }
 
-    _createParticles(nParticles) {
-        let particles = [];
-        let centerX = this.width / 2;
-        let centerY = this.height / 2;
-
-        for (let n = 0; n < 30; n++) {
-            let x = this.width / 2 + 0.1 * this.width * (0.5 - Math.random());
-            let y = this.height / 2 + 0.1 * this.height * (0.5 - Math.random());
-            let dx = 1 * (0.5 - Math.random());
-            let dy = 1 * (0.5 - Math.random());
-            let m = 10 * Math.random();
-            particles.push(new Particle(m, x, y, dx, dy));
-        }
-        // particles.push(new Particle(10, centerX - 10, centerY , 0, 5));
-        // particles.push(new Particle(10, centerX + 10, centerY, 0, -5));
-
-        return particles;
+    clear() {
+        this.particles = [];
     }
+
+    addParticle(m, x, y, dx, dy, data) {
+        this.particles.push(new Particle(m, x, y, dx, dy, data));
+    }
+
+    // createParticles(nParticles) {
+    //     let particles = [];
+    //     let centerX = this.width / 2;
+    //     let centerY = this.height / 2;
+
+    //     for (let n = 0; n < 30; n++) {
+    //         let x = this.width / 2 + 0.1 * this.width * (0.5 - Math.random());
+    //         let y = this.height / 2 + 0.1 * this.height * (0.5 - Math.random());
+    //         let dx = 1 * (0.5 - Math.random());
+    //         let dy = 1 * (0.5 - Math.random());
+    //         let m = 10 * Math.random();
+    //         particles.push(new Particle(m, x, y, dx, dy));
+    //     }
+    //     // particles.push(new Particle(10, centerX - 10, centerY , 0, 5));
+    //     // particles.push(new Particle(10, centerX + 10, centerY, 0, -5));
+
+    //     return particles;
+    // }
 
     getParticles() {
         return this.particles;
@@ -454,7 +470,7 @@ class ParticlesModel {
         let dy = beta.y - alpha.y;
         let d = Math.max(10, this.distance(dx, dy));
 
-        let f = this.force(alpha.m, beta.m, d);
+        let f = -this.force(alpha.m, beta.m, d);
 
         // Split the force into its components
         let fx = f * dx / d;
@@ -482,15 +498,8 @@ class ParticlesModel {
         let dt = (ts - this.ts) * 0.001;
 
         for (let p of this.particles) {
-            this.calcParticleInteraction(this.centerParticle, p);
-        }
-
-        for (let p of this.particles) {
             p.update(dt);
         }
-
-        this.centerParticle.fx = 0;
-        this.centerParticle.fy = 0;
 
         this.ts = ts;
     }
@@ -536,7 +545,7 @@ class TetrisView {
         this.yBlockOffset = Math.floor((canvas.height - (2 * this.borderThickness + this.blocksHeight)) / 2);
 
         this.model = model;
-        this.particlesModel;
+        this.particlesModel = particlesModel;
 
         this.palette = this.generatePalette('rgba(255, 255, 255, 1.0)', model.getNbrShapes());
     }
@@ -607,12 +616,14 @@ class TetrisView {
         this.ctx.fillRect(0, 0, this.width, this.height);
     }
 
-    drawBlock(x, y, colorIndex) {
+    drawBlock(xOrigin, yOrigin, colorIndex, rotation, scale) {
         let color = this.palette[colorIndex];
-        let xOrigin = this.borderThickness + this.xBlockOffset + x * this.blockSize;
-        let yOrigin = this.borderThickness + this.yBlockOffset + y * this.blockSize;
+        // let xOrigin = this.borderThickness + this.xBlockOffset + x * this.blockSize;
+        // let yOrigin = this.borderThickness + this.yBlockOffset + y * this.blockSize;
         let s = this.blockSize;
 
+        // this.ctx.rotate(rotation);
+        // this.ctx.scale(scale);
         this.ctx.beginPath()
         this.ctx.moveTo(xOrigin, yOrigin);
         this.ctx.lineTo(xOrigin + s, yOrigin); // top
@@ -623,23 +634,17 @@ class TetrisView {
         this.ctx.fillStyle = color;
         this.ctx.fill();
 
-        return;
-
-        if (colorIndex == 0) {
-            // Don't stroke empty blocks
-            return;
-        }
-
-        this.ctx.lineWidth = 1;
-        this.ctx.strokeStyle = 'black';
-        this.ctx.strokeRect(xOrigin, yOrigin, s, s);
+        // Reset transform
+        // this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
 
     drawBlocks() {
         for (let c = 0; c < this.model.columns; c++) {
             for (let r = 0; r < this.model.rows; r++) {
                 let colorIndex = this.model.getCellColor(c, r);
-                this.drawBlock(c, r, colorIndex);
+                let x = this.borderThickness + this.xBlockOffset + c * this.blockSize;
+                let y = this.borderThickness + this.yBlockOffset + r * this.blockSize;
+                this.drawBlock(x, y, colorIndex, 0, 1);
             }
         }
     }
@@ -648,15 +653,13 @@ class TetrisView {
         this.ctx.lineWidth = 3;
         this.ctx.strokeStyle = 'black';
         for (let p of particlesModel.getParticles()) {
-            this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, 10, 0, 2*Math.PI);
-            this.ctx.stroke();
+            let colorIndex = p.getData();
+            // let x = this.borderThickness + this.xBlockOffset + p.x - this.blockSize / 2;
+            // let y = this.borderThickness + this.yBlockOffset + p.y - this.blockSize / 2;
+            let x = p.x - this.blockSize / 2;
+            let y = p.y - this.blockSize / 2;
+            this.drawBlock(x, y, colorIndex);
         }
-
-        this.ctx.strokeStyle = 'red';
-        this.ctx.beginPath();
-        this.ctx.arc(particlesModel.centerParticle.x, particlesModel.centerParticle.y, 10, 0, 2*Math.PI);
-        this.ctx.stroke();
     }
 
     draw() {
@@ -664,7 +667,23 @@ class TetrisView {
         //this.clear();
         this.drawBlocks();
         this.drawParticles();
-    };
+    }
+
+    setCollapsable(collapsable) {
+        this.particlesModel.clear();
+
+        for (let r of collapsable) {
+            for (let c = 0; c < this.model.columns; c++) {
+                let colorIndex = this.model.getCellColor(c, r);
+                let xOrigin = this.borderThickness + this.xBlockOffset + this.blockSize / 2 + c * this.blockSize;
+                let yOrigin = this.borderThickness + this.yBlockOffset + this.blockSize / 2 + r * this.blockSize;
+                let s = this.blockSize;
+                let dx = 500 * (0.5 - Math.random());
+                let dy = 500 * (0.5 - Math.random());
+                this.particlesModel.addParticle(100, xOrigin, yOrigin, dx, dy, colorIndex);
+            }
+        }
+    }
 }
 
 let model;
@@ -675,7 +694,16 @@ let clock = 0;
 function gameLoop() {
     let ts = performance.now();
     //let ts = clock;
-    model.advance(ts);
+    if (model.prepareNextMove(ts)) {
+        collapsable = model.getCollapsable();
+
+        if (collapsable.length > 0) {
+            view.setCollapsable(collapsable);
+        }
+
+        model.makeNextMove();
+    }
+
     particlesModel.update(ts);
 
     view.draw();
