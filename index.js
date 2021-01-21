@@ -115,6 +115,9 @@ class TetrisModel {
         // An array of block shapes
         this.blockShapes = blockShapes;
 
+        // The number of points awarded for collapsing 0 through 4 lines.
+        this.lineScoreIncrements = [0, 40, 100, 300, 1200];
+
         this.reset();
     }
 
@@ -147,8 +150,39 @@ class TetrisModel {
         // dropped
         this.skipDelay = false;
 
+        // The current score
+        this.score = 0;
+
+        // The current level
+        this.level = 0;
+
+        // Total number of collapsed rows. The level increases by 1 for every 10
+        // collapsed rows.
+        this.nbrCollapsedRows = 0;
+
         // Indicates whether the game has reached it end state
         this.gameOver = false;
+    }
+
+    increaseScore(increment, useLevel) {
+        this.score += (useLevel ? (this.level + 1) : 1) * increment;
+    }
+
+    getScore() {
+        return this.score;
+    }
+
+    updateNbrCollapsedRows(rows) {
+        this.nbrCollapsedRows += rows;
+
+        // Update the score
+        this.increaseScore(this.lineScoreIncrements[rows], true);
+
+        // Update the level
+        this.level = Math.floor(this.nbrCollapsedRows / 10);
+
+        // Update the drop delay, subtract 50ms per level but cap at 100ms.
+        this.dropDelay = Math.max(100, 1000 - this.level * 50);
     }
 
     getNbrShapes() {
@@ -252,6 +286,11 @@ class TetrisModel {
             return false;
         }
 
+        // If the blocks is "soft dropped" the number of points awarded
+        // equals the number of dropped rows. The soft drop score is not
+        // affected by the current level.
+        this.increaseScore(1, false);
+
         // Position was valid update the row
         this.row += 1;
         return true;
@@ -271,10 +310,14 @@ class TetrisModel {
 
     // Drop the block straight down to a lockable position
     dropDown() {
+        let row = this.row;
         while (this.isValidPosition(this.col, this.row + 1, this.rotation)) {
             this.row += 1;
         }
 
+        // "Hard drops" are worth 2 * #rows dropped. The hard drop score is not
+        // affected the current level.
+        this.increaseScore(2 * (this.row - row), false);
         this.setSkipDelay(true);
     }
 
@@ -323,6 +366,7 @@ class TetrisModel {
         }
 
         this.cells = kept;
+        this.updateNbrCollapsedRows(removed.length);
 
         return removed;
     }
@@ -464,12 +508,6 @@ class RotatingScalingParticle extends Particle {
     update(ts) {
         // Calculate the new position
         super.update(ts);
-
-        // Update rotation
-        //this.angle += this.theta * this.dt;
-
-        // Update scale
-        //this.scale = 1 / (ts + this.k);
     }
 
     getAlpha() {
@@ -482,7 +520,6 @@ class RotatingScalingParticle extends Particle {
 
     getScale() {
         return this.scale * Math.pow(this.k, this.ts - this.t0);
-        //return this.scale;
     }
 
     getColor() {
@@ -656,10 +693,6 @@ class TetrisView {
         let yOrigin = this.ySurfaceOffset;
         let t = this.borderThickness;
 
-        //this.ctx.fillStyle = 'rbga(255, 255, 255, 0.3)';
-        //this.ctx.fillStyle = 'rbga(255, 255, 255, 1.0)';
-        //this.ctx.fillRect(xOrigin, yOrigin, this.borderWidth, this.borderHeight);
-
         this.ctx.strokeStyle = 'red';
         this.ctx.strokeRect(0, 0, this.width, this.height);
         this.ctx.lineWidth = this.borderThickness;
@@ -675,8 +708,6 @@ class TetrisView {
     }
 
     drawBlock(xOrigin, yOrigin, color, stroke) {
-        // let xOrigin = this.borderThickness + this.xBlockOffset + x * this.blockSize;
-        // let yOrigin = this.borderThickness + this.yBlockOffset + y * this.blockSize;
         let s = this.blockSize;
 
         this.ctx.beginPath()
@@ -746,8 +777,6 @@ class TetrisView {
             let colorIndex = p.getColor();
             let color = this.palette[colorIndex];
             let alpha = p.getAlpha();
-            // let x = this.borderThickness + this.xBlockOffset + p.x - this.blockSize / 2;
-            // let y = this.borderThickness + this.yBlockOffset + p.y - this.blockSize / 2;
             let x = p.x - this.blockSize / 2;
             let y = p.y - this.blockSize / 2;
             this.drawRotatingScalingBlock(x, y, angle, scale, color, alpha);
@@ -756,7 +785,6 @@ class TetrisView {
 
     draw() {
         this.clearCanvas();
-        //this.clear();
         this.drawBlocks();
         this.drawParticles();
     }
@@ -784,11 +812,9 @@ class TetrisView {
 let model;
 let particlesModel;
 let view;
-let clock = 0;
 
 function gameLoop() {
     let ts = performance.now();
-    //let ts = clock;
     if (model.prepareNextMove(ts)) {
         collapsable = model.getCollapsable();
 
@@ -803,7 +829,6 @@ function gameLoop() {
 
     view.draw();
     window.requestAnimationFrame(gameLoop);
-    //clock += 1000;
 }
 
 function init() {
@@ -838,6 +863,4 @@ function init() {
     });
 
     gameLoop();
-    //window.setInterval(gameLoop, 1000);
-    //document.getElementById("button").onclick = gameLoop;
 }
