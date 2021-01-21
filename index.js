@@ -47,17 +47,17 @@ class BlockL2 extends Block {
     }
 }
 
-class BlockA1 extends Block {
-    // An angle shape
+class BlockS1 extends Block {
+    // An S shape
     constructor() {
-        super([new Coord(0, -1), new Coord(0, 0), new Coord(1, 0)]);
+        super([new Coord(-1, 0), new Coord(0, 0), new Coord(0, -1), new Coord(1, -1)]);
     }
 }
 
-class BlockA2 extends Block {
-    // An inverted angle shape
+class BlockS2 extends Block {
+    // An inverted S shape
     constructor() {
-        super([new Coord(0, -1), new Coord(-1, 0), new Coord(0, 0)]);
+        super([new Coord(-1, -1), new Coord(0, -1), new Coord(0, 0), new Coord(1, 0)]);
     }
 }
 
@@ -401,6 +401,9 @@ class Particle {
         this.fy = 0;
         this.fx = 0;
         this.data = data;
+        this.t0;
+        this.ts;
+        this.dt;
     }
 
     updateForce(fx, fy) {
@@ -408,14 +411,24 @@ class Particle {
         this.fy += fy;
     }
 
-    update(dt) {
+    update(ts) {
+        if (this.ts === undefined) {
+            this.t0 = ts;
+            this.ts = ts;
+            return;
+        }
+
+        // Update timestamp and delta time
+        this.dt = ts - this.ts;
+        this.ts = ts;
+
         // Update velocity according to the force acting upon the particle
         this.dx += this.fx / this.m;
         this.dy += this.fy / this.m;
 
         // Update the position according to the velocity
-        this.x += this.dx * dt;
-        this.y += this.dy * dt;
+        this.x += this.dx * this.dt;
+        this.y += this.dy * this.dt;
 
         // Reset the forces so that they are fresh upon the next iteration
         this.fx = 0;
@@ -424,6 +437,48 @@ class Particle {
 
     getData() {
         return this.data;
+    }
+}
+
+class RotatingScalingParticle extends Particle {
+    constructor(m, x, y, dx, dy, theta, k, color) {
+        super(m, x, y, dx, dy)
+
+        // Angular velocity (radians/s)
+        this.theta = theta;
+
+        // Curent scale
+        this.scale = 1;
+
+        // Scaling factor
+        this.k = k;
+
+        // The color of the particle
+        this.color = color;
+    }
+
+    update(ts) {
+        // Calculate the new position
+        super.update(ts);
+
+        // Update rotation
+        //this.angle += this.theta * this.dt;
+
+        // Update scale
+        //this.scale = 1 / (ts + this.k);
+    }
+
+    getAngle() {
+        return this.theta * this.ts;
+    }
+
+    getScale() {
+        return this.scale * Math.pow(this.k, this.ts - this.t0);
+        //return this.scale;
+    }
+
+    getColor() {
+        return this.color;
     }
 }
 
@@ -438,8 +493,8 @@ class ParticlesModel {
         this.particles = [];
     }
 
-    addParticle(m, x, y, dx, dy, data) {
-        this.particles.push(new Particle(m, x, y, dx, dy, data));
+    addParticle(p) {
+        this.particles.push(p);
     }
 
     // createParticles(nParticles) {
@@ -470,7 +525,7 @@ class ParticlesModel {
         let dy = beta.y - alpha.y;
         let d = Math.max(10, this.distance(dx, dy));
 
-        let f = -this.force(alpha.m, beta.m, d);
+        let f = this.force(alpha.m, beta.m, d);
 
         // Split the force into its components
         let fx = f * dx / d;
@@ -481,27 +536,18 @@ class ParticlesModel {
     }
 
     update(ts) {
-        if (this.ts === undefined) {
-            this.ts = ts;
-            return;
-        }
+        // for (let i = 0; i < this.particles.length - 1; i++) {
+        //     for (let j = i + 1; j < this.particles.length; j++) {
+        //         let alpha = this.particles[i];
+        //         let beta = this.particles[j];
 
-        for (let i = 0; i < this.particles.length - 1; i++) {
-            for (let j = i + 1; j < this.particles.length; j++) {
-                let alpha = this.particles[i];
-                let beta = this.particles[j];
-
-                this.calcParticleInteraction(alpha, beta);
-            }
-        }
-
-        let dt = (ts - this.ts) * 0.001;
+        //         this.calcParticleInteraction(alpha, beta);
+        //     }
+        // }
 
         for (let p of this.particles) {
-            p.update(dt);
+            p.update(ts * 0.001);
         }
-
-        this.ts = ts;
     }
 
     // Calculate the force two masses separated by a distance excert on each other
@@ -612,8 +658,10 @@ class TetrisView {
     };
 
     clearCanvas() {
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 1.0)';
         this.ctx.fillRect(0, 0, this.width, this.height);
+        this.ctx.strokeStyle = 'black';
+        this.ctx.strokeRect(this.xSurfaceOffset, this.ySurfaceOffset, this.borderWidth, this.borderHeight);
     }
 
     drawBlock(xOrigin, yOrigin, colorIndex, rotation, scale) {
@@ -622,8 +670,6 @@ class TetrisView {
         // let yOrigin = this.borderThickness + this.yBlockOffset + y * this.blockSize;
         let s = this.blockSize;
 
-        // this.ctx.rotate(rotation);
-        // this.ctx.scale(scale);
         this.ctx.beginPath()
         this.ctx.moveTo(xOrigin, yOrigin);
         this.ctx.lineTo(xOrigin + s, yOrigin); // top
@@ -634,8 +680,14 @@ class TetrisView {
         this.ctx.fillStyle = color;
         this.ctx.fill();
 
-        // Reset transform
-        // this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        if (colorIndex == 0) {
+            // Don't stroke empty cells
+            return;
+        }
+
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeStype = 'black';
+        this.ctx.strokeRect(xOrigin, yOrigin, s, s);
     }
 
     drawBlocks() {
@@ -649,16 +701,46 @@ class TetrisView {
         }
     }
 
+    drawRotatingScalingBlock(xOrigin, yOrigin, angle, scale, colorIndex) {
+        let color = this.palette[colorIndex];
+        // let xOrigin = this.borderThickness + this.xBlockOffset + x * this.blockSize;
+        // let yOrigin = this.borderThickness + this.yBlockOffset + y * this.blockSize;
+        let s = this.blockSize;
+
+        this.ctx.translate(xOrigin + s / 2, yOrigin + s / 2);
+        this.ctx.rotate(angle);
+        this.ctx.scale(scale, scale);
+        this.ctx.translate(-xOrigin - s / 2, -yOrigin - s / 2);
+
+        this.ctx.beginPath()
+        this.ctx.moveTo(xOrigin, yOrigin);
+        this.ctx.lineTo(xOrigin + s, yOrigin); // top
+        this.ctx.lineTo(xOrigin + s, yOrigin + s); // right
+        this.ctx.lineTo(xOrigin, yOrigin + s); // bottom
+        this.ctx.closePath();
+
+        this.ctx.fillStyle = color;
+        this.ctx.fill();
+
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeStype = 'black';
+        this.ctx.strokeRect(xOrigin, yOrigin, s, s);
+
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+
     drawParticles() {
-        this.ctx.lineWidth = 3;
+        this.ctx.lineWidth = 1;
         this.ctx.strokeStyle = 'black';
         for (let p of particlesModel.getParticles()) {
-            let colorIndex = p.getData();
+            let angle = p.getAngle();
+            let scale = p.getScale();
+            let colorIndex = p.getColor();
             // let x = this.borderThickness + this.xBlockOffset + p.x - this.blockSize / 2;
             // let y = this.borderThickness + this.yBlockOffset + p.y - this.blockSize / 2;
             let x = p.x - this.blockSize / 2;
             let y = p.y - this.blockSize / 2;
-            this.drawBlock(x, y, colorIndex);
+            this.drawRotatingScalingBlock(x, y, angle, scale, colorIndex);
         }
     }
 
@@ -678,9 +760,13 @@ class TetrisView {
                 let xOrigin = this.borderThickness + this.xBlockOffset + this.blockSize / 2 + c * this.blockSize;
                 let yOrigin = this.borderThickness + this.yBlockOffset + this.blockSize / 2 + r * this.blockSize;
                 let s = this.blockSize;
-                let dx = 500 * (0.5 - Math.random());
-                let dy = 500 * (0.5 - Math.random());
-                this.particlesModel.addParticle(100, xOrigin, yOrigin, dx, dy, colorIndex);
+                let m = 100;
+                let dx = 100 * (0.5 - Math.random());
+                let dy = 100 * (0.5 - Math.random());
+                let theta = 5 * Math.random();
+                let k = 0.5;
+                let p = new RotatingScalingParticle(100, xOrigin, yOrigin, dx, dy, theta, k, colorIndex)
+                this.particlesModel.addParticle(p);
             }
         }
     }
@@ -718,7 +804,7 @@ function init() {
     canvas.height = 800;
     let columns = 10;
     let rows = 20;
-    model = new TetrisModel(columns, rows, [new Block1(), new BlockL1(), new BlockL2(), new BlockA1(), new BlockA2(), new BlockI(), new BlockS()])
+    model = new TetrisModel(columns, rows, [new Block1(), new BlockL1(), new BlockL2(), new BlockS1(), new BlockS2(), new BlockI(), new BlockS()])
     particlesModel = new ParticlesModel(2, canvas.width, canvas.height);
     view = new TetrisView(canvas, model, particlesModel);
 
