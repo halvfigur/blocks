@@ -392,7 +392,7 @@ class TetrisModel {
 };
 
 class Particle {
-    constructor(m, x, y, dx, dy, data) {
+    constructor(m, x, y, dx, dy, lifeTime) {
         this.m = m;
         this.x = x;
         this.y = y;
@@ -400,7 +400,7 @@ class Particle {
         this.dy = dy;
         this.fy = 0;
         this.fx = 0;
-        this.data = data;
+        this.lifeTime = lifeTime;
         this.t0;
         this.ts;
         this.dt;
@@ -435,14 +435,18 @@ class Particle {
         this.fy = 0;
     }
 
-    getData() {
-        return this.data;
+    getAlpha() {
+        return 1.0;
+    }
+
+    isExpired() {
+        return this.ts === undefined ? false : this.ts - this.t0 > this.lifeTime;
     }
 }
 
 class RotatingScalingParticle extends Particle {
-    constructor(m, x, y, dx, dy, theta, k, color) {
-        super(m, x, y, dx, dy)
+    constructor(m, x, y, dx, dy, lifeTime, theta, k, color) {
+        super(m, x, y, dx, dy, lifeTime)
 
         // Angular velocity (radians/s)
         this.theta = theta;
@@ -468,6 +472,10 @@ class RotatingScalingParticle extends Particle {
         //this.scale = 1 / (ts + this.k);
     }
 
+    getAlpha() {
+        return 1 - (this.ts - this.t0) / this.lifeTime;
+    }
+
     getAngle() {
         return this.theta * this.ts;
     }
@@ -486,10 +494,6 @@ class ParticlesModel {
     constructor(nParticles, width, height) {
         this.width = width;
         this.height = height;
-        this.particles = [];
-    }
-
-    clear() {
         this.particles = [];
     }
 
@@ -545,9 +549,15 @@ class ParticlesModel {
         //     }
         // }
 
+        let keptParticles = [];
         for (let p of this.particles) {
             p.update(ts * 0.001);
+            if (!p.isExpired()) {
+                keptParticles.push(p);
+            }
         }
+
+        this.particles = keptParticles;
     }
 
     // Calculate the force two masses separated by a distance excert on each other
@@ -664,8 +674,7 @@ class TetrisView {
         this.ctx.strokeRect(this.xSurfaceOffset, this.ySurfaceOffset, this.borderWidth, this.borderHeight);
     }
 
-    drawBlock(xOrigin, yOrigin, colorIndex, rotation, scale) {
-        let color = this.palette[colorIndex];
+    drawBlock(xOrigin, yOrigin, color, stroke) {
         // let xOrigin = this.borderThickness + this.xBlockOffset + x * this.blockSize;
         // let yOrigin = this.borderThickness + this.yBlockOffset + y * this.blockSize;
         let s = this.blockSize;
@@ -680,8 +689,7 @@ class TetrisView {
         this.ctx.fillStyle = color;
         this.ctx.fill();
 
-        if (colorIndex == 0) {
-            // Don't stroke empty cells
+        if (!stroke) {
             return;
         }
 
@@ -696,15 +704,13 @@ class TetrisView {
                 let colorIndex = this.model.getCellColor(c, r);
                 let x = this.borderThickness + this.xBlockOffset + c * this.blockSize;
                 let y = this.borderThickness + this.yBlockOffset + r * this.blockSize;
-                this.drawBlock(x, y, colorIndex, 0, 1);
+                let color = this.palette[colorIndex];
+                this.drawBlock(x, y, color, colorIndex != 0);
             }
         }
     }
 
-    drawRotatingScalingBlock(xOrigin, yOrigin, angle, scale, colorIndex) {
-        let color = this.palette[colorIndex];
-        // let xOrigin = this.borderThickness + this.xBlockOffset + x * this.blockSize;
-        // let yOrigin = this.borderThickness + this.yBlockOffset + y * this.blockSize;
+    drawRotatingScalingBlock(xOrigin, yOrigin, angle, scale, color, alpha) {
         let s = this.blockSize;
 
         this.ctx.translate(xOrigin + s / 2, yOrigin + s / 2);
@@ -712,6 +718,7 @@ class TetrisView {
         this.ctx.scale(scale, scale);
         this.ctx.translate(-xOrigin - s / 2, -yOrigin - s / 2);
 
+        this.ctx.globalAlpha = alpha;
         this.ctx.beginPath()
         this.ctx.moveTo(xOrigin, yOrigin);
         this.ctx.lineTo(xOrigin + s, yOrigin); // top
@@ -727,6 +734,7 @@ class TetrisView {
         this.ctx.strokeRect(xOrigin, yOrigin, s, s);
 
         this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        this.ctx.globalAlpha = 1;
     }
 
     drawParticles() {
@@ -736,11 +744,13 @@ class TetrisView {
             let angle = p.getAngle();
             let scale = p.getScale();
             let colorIndex = p.getColor();
+            let color = this.palette[colorIndex];
+            let alpha = p.getAlpha();
             // let x = this.borderThickness + this.xBlockOffset + p.x - this.blockSize / 2;
             // let y = this.borderThickness + this.yBlockOffset + p.y - this.blockSize / 2;
             let x = p.x - this.blockSize / 2;
             let y = p.y - this.blockSize / 2;
-            this.drawRotatingScalingBlock(x, y, angle, scale, colorIndex);
+            this.drawRotatingScalingBlock(x, y, angle, scale, color, alpha);
         }
     }
 
@@ -752,8 +762,6 @@ class TetrisView {
     }
 
     setCollapsable(collapsable) {
-        this.particlesModel.clear();
-
         for (let r of collapsable) {
             for (let c = 0; c < this.model.columns; c++) {
                 let colorIndex = this.model.getCellColor(c, r);
@@ -763,9 +771,10 @@ class TetrisView {
                 let m = 100;
                 let dx = 100 * (0.5 - Math.random());
                 let dy = 100 * (0.5 - Math.random());
-                let theta = 5 * Math.random();
-                let k = 0.5;
-                let p = new RotatingScalingParticle(100, xOrigin, yOrigin, dx, dy, theta, k, colorIndex)
+                let lifeTime = 0.5;
+                let theta = 10 * (0.5 - Math.random());
+                let k = 400;
+                let p = new RotatingScalingParticle(100, xOrigin, yOrigin, dx, dy, lifeTime, theta, k, colorIndex)
                 this.particlesModel.addParticle(p);
             }
         }
