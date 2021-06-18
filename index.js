@@ -172,6 +172,10 @@ class TetrisModel {
         return this.score;
     }
 
+    getLevel() {
+        return this.level;
+    }
+
     updateNbrCollapsedRows(rows) {
         this.nbrCollapsedRows += rows;
 
@@ -619,7 +623,8 @@ class TetrisView {
         // TODO compensate if the width and height can't fit the model properly
         this.width = canvas.width;
         this.height = canvas.height;
-        this.borderThickness = 1;
+        this.borderThickness = 2;
+        this.blockBorderThickness = 1;
 
         let maxBlockWidth = (this.width - 2 * this.borderThickness) / model.columns;
         let maxBlockHeight = (this.height - 2 * this.borderThickness) / model.rows;
@@ -631,13 +636,21 @@ class TetrisView {
         this.borderWidth = 2 * this.borderThickness + this.blocksWidth;
         this.borderHeight = 2 * this.borderThickness + this.blocksHeight;
 
-        this.xSurfaceOffset = Math.floor((this.width - this.borderWidth) / 2);
-        this.ySurfaceOffset = Math.floor((this.height - this.borderHeight) / 2);
+        // this.xSurfaceOffset = Math.floor((this.width - this.borderWidth) / 2);
+        // this.ySurfaceOffset = Math.floor((this.height - this.borderHeight) / 2);
+        this.xSurfaceOffset = this.borderThickness;
+        this.ySurfaceOffset = this.borderThickness;
 
-        this.xBlockOffset = Math.floor((canvas.width - (2 * this.borderThickness + this.blocksWidth)) / 2);
-        this.yBlockOffset = Math.floor((canvas.height - (2 * this.borderThickness + this.blocksHeight)) / 2);
+        // this.xBlockOffset = Math.floor((canvas.width - (2 * this.borderThickness + this.blocksWidth)) / 2);
+        // this.yBlockOffset = Math.floor((canvas.height - (2 * this.borderThickness + this.blocksHeight)) / 2);
+        this.xBlockOffset = this.xSurfaceOffset + this.borderThickness;
+        this.yBlockOffset = this.ySurfaceOffset + this.borderThickness;
+
+        this.xTextOffset = this.xSurfaceOffset + this.blocksWidth + 2 * this.borderThickness;
+        this.yTextOffset = this.ySurfaceOffset + this.borderThickness + 2 * this.borderThickness;
 
         this.model = model;
+
         this.particlesModel = particlesModel;
 
         this.palette = this.generatePalette('rgba(255, 255, 255, 1.0)', model.getNbrShapes());
@@ -693,18 +706,45 @@ class TetrisView {
         let yOrigin = this.ySurfaceOffset;
         let t = this.borderThickness;
 
-        this.ctx.strokeStyle = 'red';
-        this.ctx.strokeRect(0, 0, this.width, this.height);
         this.ctx.lineWidth = this.borderThickness;
         this.ctx.strokeStyle = 'black';
-        this.ctx.strokeRect(xOrigin, yOrigin, this.borderWidth, this.borderHeight);
+        this.ctx.strokeRect(xOrigin, yOrigin, this.blocksWidth, this.blocksHeight);
     };
+
+    drawGameOver() {
+        let x = (this.xSurfaceOffset + this.blocksWidth) / 2;
+        let y = (this.ySurfaceOffset + this.blocksHeight) / 2;
+
+        this.ctx.fillStyle = 'black';
+        this.ctx.font = '40px monospace';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.textAlign = 'center';
+
+        this.ctx.fillText("Game over!", x, y);
+    }
 
     clearCanvas() {
         this.ctx.fillStyle = 'rgba(255, 255, 255, 1.0)';
         this.ctx.fillRect(0, 0, this.width, this.height);
         this.ctx.strokeStyle = 'black';
         this.ctx.strokeRect(this.xSurfaceOffset, this.ySurfaceOffset, this.borderWidth, this.borderHeight);
+    }
+
+    drawScore() {
+        let xOrigin = this.xTextOffset;
+        let yOrigin = this.yTextOffset;
+        let score = `Score: ${this.model.getScore()}`;
+        let level = `Level: ${this.model.getLevel()}`;
+
+        let levelOffset = this.ctx.measureText(score).actualBoundingBoxDescent;
+
+        this.ctx.fillStyle = 'black';
+        this.ctx.font = '20px monospace';
+        this.ctx.textAlign = 'start';
+        this.ctx.textBaseline = 'hanging';
+
+        this.ctx.fillText(score, xOrigin, yOrigin);
+        this.ctx.fillText(level, xOrigin, yOrigin + 20);
     }
 
     drawBlock(xOrigin, yOrigin, color, stroke) {
@@ -724,19 +764,22 @@ class TetrisView {
             return;
         }
 
-        this.ctx.lineWidth = 1;
+        let w = this.blockBorderThickness;
+        this.ctx.lineWidth = w;
         this.ctx.strokeStype = 'black';
-        this.ctx.strokeRect(xOrigin, yOrigin, s, s);
+        this.ctx.strokeRect(xOrigin + w / 2, yOrigin + w / 2, s - w, s - w);
+
     }
 
     drawBlocks() {
         for (let c = 0; c < this.model.columns; c++) {
             for (let r = 0; r < this.model.rows; r++) {
                 let colorIndex = this.model.getCellColor(c, r);
-                let x = this.borderThickness + this.xBlockOffset + c * this.blockSize;
-                let y = this.borderThickness + this.yBlockOffset + r * this.blockSize;
+                let x = this.xBlockOffset + c * this.blockSize;
+                let y = this.yBlockOffset + r * this.blockSize;
                 let color = this.palette[colorIndex];
-                this.drawBlock(x, y, color, colorIndex != 0);
+                //this.drawBlock(x, y, color, colorIndex != 0);
+                this.drawBlock(x, y, color, false);
             }
         }
     }
@@ -760,9 +803,9 @@ class TetrisView {
         this.ctx.fillStyle = color;
         this.ctx.fill();
 
-        this.ctx.lineWidth = 1;
-        this.ctx.strokeStype = 'black';
-        this.ctx.strokeRect(xOrigin, yOrigin, s, s);
+        // this.ctx.lineWidth = 1;
+        // this.ctx.strokeStype = 'black';
+        // this.ctx.strokeRect(xOrigin, yOrigin, s, s);
 
         this.ctx.setTransform(1, 0, 0, 1, 0, 0);
         this.ctx.globalAlpha = 1;
@@ -787,6 +830,11 @@ class TetrisView {
         this.clearCanvas();
         this.drawBlocks();
         this.drawParticles();
+        this.drawScore();
+
+        if (this.model.isGameOver()) {
+            this.drawGameOver();
+        }
     }
 
     setCollapsable(collapsable) {
@@ -800,8 +848,8 @@ class TetrisView {
                 let dx = 100 * (0.5 - Math.random());
                 let dy = 100 * (0.5 - Math.random());
                 let lifeTime = 0.5;
-                let theta = 10 * (0.5 - Math.random());
-                let k = 400;
+                let theta = 4 * Math.PI * (0.5 - Math.random());
+                let k = 800;
                 let p = new RotatingScalingParticle(100, xOrigin, yOrigin, dx, dy, lifeTime, theta, k, colorIndex)
                 this.particlesModel.addParticle(p);
             }
@@ -864,3 +912,4 @@ function init() {
 
     gameLoop();
 }
+
